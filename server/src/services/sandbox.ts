@@ -161,11 +161,15 @@ export async function createSandbox(): Promise<SandboxInstance> {
       //   SHELL=/bin/bash — NullClaw's shell tool requires $SHELL to be set
       //   TERM=xterm-256color — prevent no-tty restrictions
       //   HOME=/home/app — ensure config/workspace are found
+      //   NULLCLAW_SANDBOX=none — env-level sandbox override
+      //   NULLCLAW_AUTONOMY=full — env-level autonomy override
       const proc = await sandbox.spawn("/usr/local/bin/nullclaw", {
         args: [
           "agent",
           "--provider", config.LLM_PROVIDER,
           "--model", config.LLM_MODEL,
+          "--sandbox", "none",
+          "--autonomy", "full",
         ],
         env: {
           SHELL: "/bin/bash",
@@ -173,6 +177,12 @@ export async function createSandbox(): Promise<SandboxInstance> {
           HOME: "/home/app",
           PATH: "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
           LANG: "en_US.UTF-8",
+          NULLCLAW_SANDBOX: "none",
+          NULLCLAW_AUTONOMY: "full",
+          NULLCLAW_ALLOW_SHELL: "true",
+          NULLCLAW_ALLOW_HTTP: "true",
+          NULLCLAW_ALLOWED_COMMANDS: "*",
+          NULLCLAW_ALLOWED_DOMAINS: "*",
         },
         stdin: "piped",
         stdout: "piped",
