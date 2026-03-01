@@ -91,18 +91,16 @@ export async function createSandbox(): Promise<SandboxInstance> {
     async spawnNullClaw(): Promise<SandboxProcess> {
       // Step 0: Ensure CA certificates are available for HTTPS/TLS.
       // NullClaw (static Zig binary) uses Zig's built-in TLS which looks for
-      // CA certs at /etc/ssl/certs/ca-certificates.crt. The Deno Sandbox microVM
-      // may not have them pre-installed, causing TlsInitializationFailed errors.
-      // We write a Deno script to a temp file (avoids shell quoting issues with
-      // sandbox.sh template literals), then run it with full permissions.
+      // CA certs via SSL_CERT_FILE env var, then /etc/ssl/certs/ca-certificates.crt.
+      // The Deno Sandbox runs as non-root so /etc/ssl is not writable.
+      // We download to a user-writable path and pass SSL_CERT_FILE when spawning.
+      const CA_CERT_PATH = "/tmp/ca-certificates.crt";
       try {
         const certScript = [
           'const resp = await fetch("https://curl.se/ca/cacert.pem");',
           'if (!resp.ok) { console.error("fetch failed: " + resp.status); Deno.exit(1); }',
           'const pem = await resp.text();',
-          'try { await Deno.mkdir("/etc/ssl/certs", { recursive: true }); } catch {}',
-          'await Deno.writeTextFile("/etc/ssl/certs/ca-certificates.crt", pem);',
-          'await Deno.writeTextFile("/etc/ssl/cert.pem", pem);',
+          `await Deno.writeTextFile("${CA_CERT_PATH}", pem);`,
           'const count = pem.split("-----BEGIN CERTIFICATE-----").length - 1;',
           'console.log("CA certs installed (" + count + " certs)");',
         ].join("\n");
@@ -129,13 +127,20 @@ export async function createSandbox(): Promise<SandboxInstance> {
         'let c = {};',
         'try { c = JSON.parse(Deno.readTextFileSync(p)); } catch {}',
         'c.http_request = { enabled: true, search_provider: "duckduckgo", search_fallback_providers: ["jina"] };',
-        'c.autonomy = { level: "full", allowed_commands: ["*"], allowed_paths: ["*"], require_approval_for_medium_risk: false };',
+        'c.autonomy = { level: "full", allowed_commands: ["*"], allowed_paths: ["*"], require_approval_for_medium_risk: false, block_high_risk_commands: false };',
+        // Disable NullClaw's internal sandbox — already inside Firecracker microVM
+        'c.security = { sandbox: { backend: "none" }, resources: { max_memory_mb: 512 } };',
+        // Ensure workspace_only is off so shell can access the full filesystem
+        'c.autonomy.workspace_only = false;',
         'Deno.writeTextFileSync(p, JSON.stringify(c, null, 2));',
         'console.log("config patched");',
       ].join("\n");
       await sandbox.fs.writeTextFile("/tmp/patch-config.ts", patchScript);
       const patchConfig = await sandbox.sh`deno run --allow-read --allow-write --allow-env /tmp/patch-config.ts`;
       if (patchConfig.stderr) console.warn(`[sandbox] Config patch stderr: ${patchConfig.stderr}`);
+
+      // Step 2.5: Set SSL_CERT_FILE so Zig's TLS can find the CA bundle.
+      await sandbox.env.set("SSL_CERT_FILE", CA_CERT_PATH);
 
       // Step 3: Spawn the interactive agent directly.
       const proc = await sandbox.spawn("/usr/local/bin/nullclaw", {
@@ -144,6 +149,9 @@ export async function createSandbox(): Promise<SandboxInstance> {
           "--provider", config.LLM_PROVIDER,
           "--model", config.LLM_MODEL,
         ],
+        env: {
+          SSL_CERT_FILE: CA_CERT_PATH,
+        },
         stdin: "piped",
         stdout: "piped",
         stderr: "piped",
