@@ -8,7 +8,7 @@
  * Snapshot APIs for managing volumes and snapshots programmatically.
  *
  * Usage:
- *   bun run scripts/create-snapshot.ts [--force]
+ *   npx tsx scripts/create-snapshot.ts [--force]
  *
  * Environment variables:
  *   DENO_DEPLOY_TOKEN  - Required. Auth token from console.deno.com.
@@ -167,7 +167,29 @@ async function main() {
     log(`Install output: ${installResult.stdout}`);
 
     // -------------------------------------------------------------------
-    // Step 5: Verify binary works
+    // Step 5: Install Mozilla CA certificates for TLS
+    // -------------------------------------------------------------------
+    // NullClaw (static Zig binary) uses Zig's built-in TLS which hardcodes
+    // Linux cert paths. Without these certs, all HTTPS requests fail with
+    // TlsInitializationFailed. We bake them into the snapshot so every
+    // session gets them instantly without downloading at boot time.
+    log("Installing CA certificates...");
+    const certScript = [
+      'const resp = await fetch("https://curl.se/ca/cacert.pem");',
+      'if (!resp.ok) { console.error("fetch failed: " + resp.status); Deno.exit(1); }',
+      'const pem = await resp.text();',
+      'await Deno.writeTextFile("/tmp/ca-certificates.crt", pem);',
+      'const count = pem.split("-----BEGIN CERTIFICATE-----").length - 1;',
+      'console.log("Downloaded " + count + " CA certs");',
+    ].join("\n");
+    await sandbox.fs.writeTextFile("/tmp/install-certs.ts", certScript);
+    const certDownload = await sandbox.sh`deno run --allow-net --allow-read --allow-write /tmp/install-certs.ts`;
+    log(`CA cert download: ${certDownload.stdout}`);
+    await sandbox.sh`sudo mkdir -p /etc/ssl/certs /etc/pki/tls/certs && sudo cp /tmp/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt && sudo cp /tmp/ca-certificates.crt /etc/ssl/cert.pem && sudo cp /tmp/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt`;
+    log("CA certs installed to /etc/ssl/");
+
+    // -------------------------------------------------------------------
+    // Step 6: Verify binary works
     // -------------------------------------------------------------------
     log("Verifying NullClaw binary...");
     const versionResult = await sandbox.sh`/usr/local/bin/nullclaw --version`;
@@ -179,14 +201,14 @@ async function main() {
     }
 
     // -------------------------------------------------------------------
-    // Step 6: Shutdown sandbox before snapshotting
+    // Step 7: Shutdown sandbox before snapshotting
     // -------------------------------------------------------------------
     log("Shutting down sandbox before snapshot...");
     await sandbox.kill();
     log("Sandbox killed.");
 
     // -------------------------------------------------------------------
-    // Step 7: Create snapshot from the build volume
+    // Step 8: Create snapshot from the build volume
     // -------------------------------------------------------------------
     log(`Creating snapshot "${SNAPSHOT_SLUG}" from build volume...`);
     const snapshot = await client.volumes.snapshot(volume.id, {
@@ -195,7 +217,7 @@ async function main() {
     log(`Snapshot created: id=${snapshot.id}, slug=${snapshot.slug}, bootable=${snapshot.isBootable}`);
 
     // -------------------------------------------------------------------
-    // Step 8: Verify snapshot boots correctly
+    // Step 9: Verify snapshot boots correctly
     // -------------------------------------------------------------------
     log("Verifying snapshot by booting a test sandbox...");
     try {
@@ -221,7 +243,7 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
-  // Step 9: Clean up build volume
+  // Step 10: Clean up build volume
   // -----------------------------------------------------------------------
   log(`Cleaning up build volume "${BUILD_VOLUME_SLUG}"...`);
   try {

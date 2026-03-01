@@ -89,32 +89,9 @@ export async function createSandbox(): Promise<SandboxInstance> {
     raw: sandbox,
 
     async spawnNullClaw(): Promise<SandboxProcess> {
-      // Step 0: Ensure CA certificates are available for HTTPS/TLS.
-      // NullClaw (static Zig binary) uses Zig's built-in TLS which hardcodes
-      // Linux cert paths: /etc/ssl/certs/ca-certificates.crt, /etc/ssl/cert.pem, etc.
-      // (Zig does NOT check SSL_CERT_FILE — it's not OpenSSL.)
-      // The Deno Sandbox runs as non-root, so we download to /tmp first via Deno
-      // (which has its own bundled CAs), then use sudo to copy to /etc/ssl/.
-      try {
-        const certScript = [
-          'const resp = await fetch("https://curl.se/ca/cacert.pem");',
-          'if (!resp.ok) { console.error("fetch failed: " + resp.status); Deno.exit(1); }',
-          'const pem = await resp.text();',
-          'await Deno.writeTextFile("/tmp/ca-certificates.crt", pem);',
-          'const count = pem.split("-----BEGIN CERTIFICATE-----").length - 1;',
-          'console.log("Downloaded " + count + " CA certs");',
-        ].join("\n");
-        await sandbox.fs.writeTextFile("/tmp/install-certs.ts", certScript);
-        const download = await sandbox.sh`deno run --allow-net --allow-read --allow-write /tmp/install-certs.ts`;
-        if (download.stdout) console.log(`[sandbox] ${download.stdout}`);
-
-        // Copy to all locations Zig's TLS checks on Linux
-        await sandbox.sh`sudo mkdir -p /etc/ssl/certs /etc/pki/tls/certs && sudo cp /tmp/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt && sudo cp /tmp/ca-certificates.crt /etc/ssl/cert.pem && sudo cp /tmp/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt`;
-        console.log("[sandbox] CA certs installed to /etc/ssl/");
-      } catch (err: any) {
-        console.error(`[sandbox] CA cert installation failed:`, err.message ?? err);
-        console.warn(`[sandbox] NullClaw HTTPS requests may fail without CA certs`);
-      }
+      // CA certificates are pre-installed in the snapshot (see create-snapshot.ts).
+      // Zig's TLS hardcodes Linux cert paths (/etc/ssl/certs/ca-certificates.crt, etc.)
+      // so they must exist on disk — no env vars needed.
 
       // Step 1: Onboard NullClaw with API key and provider
       const onboard = await sandbox.sh`/usr/local/bin/nullclaw onboard --api-key ${config.LLM_API_KEY} --provider ${config.LLM_PROVIDER}`;
