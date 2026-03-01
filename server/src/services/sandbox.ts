@@ -93,16 +93,26 @@ export async function createSandbox(): Promise<SandboxInstance> {
       const onboard = await sandbox.sh`/usr/local/bin/nullclaw onboard --api-key ${config.LLM_API_KEY} --provider ${config.LLM_PROVIDER}`;
       if (onboard.stderr) console.warn(`[sandbox] Onboard stderr: ${onboard.stderr}`);
 
-      // Step 2: Patch config to enable web search + full autonomy.
-      // Onboard creates ~/.nullclaw/config.json — we merge in additional
-      // keys for http_request (web search via DuckDuckGo, no API key needed)
-      // and full autonomy so NullClaw can use all its built-in tools.
+      // Step 2: Patch config to enable web search, HTTP fetching, and full autonomy.
+      // Onboard creates ~/.nullclaw/config.json — we merge in additional keys:
+      //   - http_request: enables web search (DuckDuckGo primary, Jina fallback)
+      //     and general HTTP fetching for NullClaw's http_request tool
+      //   - autonomy: full access to all built-in tools without approval prompts
       const patchConfig = await sandbox.sh`deno eval "
 const p = Deno.env.get('HOME') + '/.nullclaw/config.json';
 let c = {};
 try { c = JSON.parse(Deno.readTextFileSync(p)); } catch {}
-c.http_request = { enabled: true, search_provider: 'duckduckgo' };
-c.autonomy = { level: 'full', allowed_commands: ['*'], allowed_paths: ['*'] };
+c.http_request = {
+  enabled: true,
+  search_provider: 'duckduckgo',
+  search_fallback_providers: ['jina']
+};
+c.autonomy = {
+  level: 'full',
+  allowed_commands: ['*'],
+  allowed_paths: ['*'],
+  require_approval_for_medium_risk: false
+};
 Deno.writeTextFileSync(p, JSON.stringify(c, null, 2));
 console.log('ok');
 "`;
