@@ -93,7 +93,22 @@ export async function createSandbox(): Promise<SandboxInstance> {
       const onboard = await sandbox.sh`/usr/local/bin/nullclaw onboard --api-key ${config.LLM_API_KEY} --provider ${config.LLM_PROVIDER}`;
       if (onboard.stderr) console.warn(`[sandbox] Onboard stderr: ${onboard.stderr}`);
 
-      // Step 2: Spawn the interactive agent directly.
+      // Step 2: Patch config to enable web search + full autonomy.
+      // Onboard creates ~/.nullclaw/config.json — we merge in additional
+      // keys for http_request (web search via DuckDuckGo, no API key needed)
+      // and full autonomy so NullClaw can use all its built-in tools.
+      const patchConfig = await sandbox.sh`deno eval "
+const p = Deno.env.get('HOME') + '/.nullclaw/config.json';
+let c = {};
+try { c = JSON.parse(Deno.readTextFileSync(p)); } catch {}
+c.http_request = { enabled: true, search_provider: 'duckduckgo' };
+c.autonomy = { level: 'full', allowed_commands: ['*'], allowed_paths: ['*'] };
+Deno.writeTextFileSync(p, JSON.stringify(c, null, 2));
+console.log('ok');
+"`;
+      if (patchConfig.stderr) console.warn(`[sandbox] Config patch stderr: ${patchConfig.stderr}`);
+
+      // Step 3: Spawn the interactive agent directly.
       const proc = await sandbox.spawn("/usr/local/bin/nullclaw", {
         args: [
           "agent",
