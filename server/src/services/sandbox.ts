@@ -138,44 +138,52 @@ export async function createSandbox(): Promise<SandboxInstance> {
       await sandbox.env.set("TERM", "xterm-256color");
       await sandbox.env.set("LANG", "en_US.UTF-8");
 
-      // Step 2.6: Write TOOLS.md to instruct NullClaw to use curl for web access.
-      // The built-in http_request tool uses Zig's TLS which can't handle modern
-      // post-quantum cipher suites (X25519MLKEM768). curl uses OpenSSL and works fine.
+      // Step 2.6: Append web access instructions to SOUL.md (highest priority in system prompt).
+      // The built-in http_request/browser tools use Zig's TLS which fails with modern
+      // post-quantum ciphers. curl (OpenSSL) works fine via shell tool.
+      // Also write TOOLS.md with reference examples.
+      const webAccessDirective = [
+        "",
+        "## CRITICAL: Web Access Rules",
+        "",
+        "**NEVER use the `http_request` tool or `browser` tool.** They are broken in this environment (Zig TLS incompatibility).",
+        "**ALWAYS use the `shell` tool with `curl` for ANY web request.** curl works perfectly.",
+        "",
+        "Examples:",
+        "- Fetch a URL: `curl -sL https://example.com`",
+        "- Search DuckDuckGo: `curl -s 'https://html.duckduckgo.com/html/?q=search+terms'`",
+        "- POST JSON: `curl -s -X POST https://api.example.com -H 'Content-Type: application/json' -d '{\"key\": \"val\"}'`",
+        "- Fetch JSON API: `curl -s https://api.example.com/data`",
+        "",
+        "This is NOT optional. The http_request and browser tools WILL fail with TLS errors every time.",
+        "Use shell + curl instead. curl is in the allowed commands list.",
+        "",
+      ].join("\n");
+      try {
+        const existingSoul = await sandbox.fs.readTextFile("/home/app/.nullclaw/workspace/SOUL.md");
+        await sandbox.fs.writeTextFile("/home/app/.nullclaw/workspace/SOUL.md", existingSoul + webAccessDirective);
+      } catch {
+        await sandbox.fs.writeTextFile("/home/app/.nullclaw/workspace/SOUL.md", webAccessDirective);
+      }
+
       const toolsMd = [
         "# TOOLS.md - Environment Notes",
         "",
         "## Web Access",
         "",
-        "**IMPORTANT: Always use `curl` via the shell tool for ALL web requests.**",
-        "The built-in `http_request` and `browser` tools do NOT work in this environment",
-        "(TLS initialization fails due to a Zig TLS compatibility issue).",
+        "The `http_request` and `browser` tools are BROKEN (Zig TLS issue).",
+        "Use `curl` via the `shell` tool for everything:",
         "",
-        "Use shell commands instead:",
-        "",
-        "### Web Search (DuckDuckGo)",
         "```bash",
-        'curl -s "https://html.duckduckgo.com/html/?q=YOUR+SEARCH+QUERY" | grep -oP \'(?<=<a rel="nofollow" class="result__a" href=")[^"]*\' | head -10',
-        "```",
+        "# Search",
+        "curl -s 'https://html.duckduckgo.com/html/?q=YOUR+QUERY'",
         "",
-        "### Fetch a URL",
-        "```bash",
+        "# Fetch URL",
         "curl -sL https://example.com",
+        "",
+        "# POST JSON",
+        "curl -s -X POST URL -H 'Content-Type: application/json' -d '{}'",
         "```",
-        "",
-        "### Fetch JSON API",
-        "```bash",
-        'curl -s "https://api.example.com/data" | python3 -m json.tool',
-        "```",
-        "",
-        "### POST JSON",
-        "```bash",
-        "curl -s -X POST https://api.example.com/endpoint -H 'Content-Type: application/json' -d '{\"key\": \"value\"}'",
-        "```",
-        "",
-        "## Available Shell Commands",
-        "",
-        "Common commands are available: curl, bash, git, python3, deno, cat, ls,",
-        "grep, find, sed, awk, and most standard Unix utilities.",
         "",
       ].join("\n");
       await sandbox.fs.writeTextFile("/home/app/.nullclaw/workspace/TOOLS.md", toolsMd);
