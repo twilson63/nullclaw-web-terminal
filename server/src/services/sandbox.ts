@@ -112,12 +112,12 @@ export async function createSandbox(): Promise<SandboxInstance> {
         'const p = Deno.env.get("HOME") + "/.nullclaw/config.json";',
         'let c = {};',
         'try { c = JSON.parse(Deno.readTextFileSync(p)); } catch {}',
-        // Enable http_request tool with DuckDuckGo search
-        'c.http_request = { enabled: true, search_provider: "duckduckgo", search_fallback_providers: ["jina"] };',
-        // Enable browser tool
+        // Enable http_request tool with DuckDuckGo search + explicit domain allowlist
+        'c.http_request = { enabled: true, search_provider: "duckduckgo", search_fallback_providers: ["jina"], allowed_domains: ["*"] };',
+        // Enable browser tool with open domain access
         'c.browser = { enabled: true, allowed_domains: ["*"] };',
-        // Autonomy: explicit command allowlist (wildcard ["*"] may not work per GH issues)
-        'c.autonomy = { level: "full", allowed_commands: ["curl", "bash", "sh", "git", "python3", "deno", "node", "cat", "ls", "head", "tail", "grep", "find", "echo", "env", "whoami", "wget", "ping", "dig", "nslookup", "apt-get", "dpkg", "uname", "date", "wc", "sort", "uniq", "tr", "sed", "awk", "mkdir", "cp", "mv", "rm", "touch", "chmod", "chown", "tar", "gzip", "gunzip", "zip", "unzip"], allowed_paths: [], workspace_only: false, require_approval_for_medium_risk: false, block_high_risk_commands: false, max_actions_per_hour: 99999 };',
+        // Autonomy: explicit command allowlist with full paths too
+        'c.autonomy = { level: "full", allowed_commands: ["*", "curl", "/usr/bin/curl", "bash", "/bin/bash", "/usr/bin/bash", "sh", "/bin/sh", "git", "/usr/bin/git", "python3", "/usr/bin/python3", "deno", "/usr/bin/deno", "/home/app/.deno/bin/deno", "node", "cat", "ls", "head", "tail", "grep", "find", "echo", "env", "whoami", "wget", "ping", "dig", "nslookup", "uname", "date", "wc", "sort", "uniq", "tr", "sed", "awk", "mkdir", "cp", "mv", "rm", "touch", "chmod", "tar"], allowed_paths: [], workspace_only: false, require_approval_for_medium_risk: false, block_high_risk_commands: false, max_actions_per_hour: 99999 };',
         // Tools config
         'c.tools = Object.assign(c.tools || {}, { shell_timeout_secs: 120, shell_max_output_bytes: 1048576, web_fetch_max_chars: 50000 });',
         // Disable NullClaw internal sandbox — already inside Firecracker
