@@ -133,11 +133,21 @@ export async function createSandbox(): Promise<SandboxInstance> {
       const patchConfig = await sandbox.sh`deno run --allow-read --allow-write --allow-env /tmp/patch-config.ts`;
       if (patchConfig.stderr) console.warn(`[sandbox] Config patch stderr: ${patchConfig.stderr}`);
 
-      // Step 2.5: Probe available agent flags for debugging
+      // Step 2.5: Probe available agent flags and tool list for debugging
       try {
-        const helpResult = await sandbox.sh`/usr/local/bin/nullclaw agent --help 2>&1 || true`;
-        console.log(`[sandbox] nullclaw agent --help:\n${helpResult.stdout}`);
-      } catch { /* ignore */ }
+        const helpResult = await sandbox.sh`/usr/local/bin/nullclaw agent --help 2>&1; echo "---STDERR---"; /usr/local/bin/nullclaw agent --help 1>/dev/null 2>&1 || true`;
+        console.log(`[sandbox] nullclaw agent --help stdout: ${helpResult.stdout}`);
+        if (helpResult.stderr) console.log(`[sandbox] nullclaw agent --help stderr: ${helpResult.stderr}`);
+      } catch (err: any) {
+        console.log(`[sandbox] agent --help failed: ${err.message}`);
+      }
+      try {
+        const doctorResult = await sandbox.sh`/usr/local/bin/nullclaw doctor 2>&1 || true`;
+        console.log(`[sandbox] nullclaw doctor: ${doctorResult.stdout}`);
+        if (doctorResult.stderr) console.log(`[sandbox] nullclaw doctor stderr: ${doctorResult.stderr}`);
+      } catch (err: any) {
+        console.log(`[sandbox] doctor failed: ${err.message}`);
+      }
 
       // Step 3: Spawn the interactive agent directly.
       // Set env vars that might control tool availability:
