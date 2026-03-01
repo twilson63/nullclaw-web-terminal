@@ -93,18 +93,27 @@ export async function createSandbox(): Promise<SandboxInstance> {
       // NullClaw (static Zig binary) uses Zig's built-in TLS which looks for
       // CA certs at /etc/ssl/certs/ca-certificates.crt. The Deno Sandbox microVM
       // may not have them pre-installed, causing TlsInitializationFailed errors.
-      // We use Deno (which has its own bundled root CAs) to fetch Mozilla's CA bundle.
-      const installCerts = await sandbox.sh`deno eval "
-const resp = await fetch('https://curl.se/ca/cacert.pem');
-if (!resp.ok) throw new Error('Failed to fetch CA bundle: ' + resp.status);
-const pem = await resp.text();
-await Deno.mkdir('/etc/ssl/certs', { recursive: true });
-await Deno.writeTextFile('/etc/ssl/certs/ca-certificates.crt', pem);
-// Also write to alternate locations Zig may check
-await Deno.writeTextFile('/etc/ssl/cert.pem', pem);
-console.log('CA certs installed (' + pem.split('-----BEGIN CERTIFICATE-----').length + ' certs)');
-"`;
-      if (installCerts.stderr) console.warn(`[sandbox] CA certs stderr: ${installCerts.stderr}`);
+      // We write a Deno script to a temp file (avoids shell quoting issues with
+      // sandbox.sh template literals), then run it with full permissions.
+      try {
+        const certScript = [
+          'const resp = await fetch("https://curl.se/ca/cacert.pem");',
+          'if (!resp.ok) { console.error("fetch failed: " + resp.status); Deno.exit(1); }',
+          'const pem = await resp.text();',
+          'try { await Deno.mkdir("/etc/ssl/certs", { recursive: true }); } catch {}',
+          'await Deno.writeTextFile("/etc/ssl/certs/ca-certificates.crt", pem);',
+          'await Deno.writeTextFile("/etc/ssl/cert.pem", pem);',
+          'const count = pem.split("-----BEGIN CERTIFICATE-----").length - 1;',
+          'console.log("CA certs installed (" + count + " certs)");',
+        ].join("\n");
+        await sandbox.fs.writeTextFile("/tmp/install-certs.ts", certScript);
+        const installCerts = await sandbox.sh`deno run --allow-net --allow-read --allow-write /tmp/install-certs.ts`;
+        if (installCerts.stdout) console.log(`[sandbox] ${installCerts.stdout}`);
+        if (installCerts.stderr) console.warn(`[sandbox] CA certs stderr: ${installCerts.stderr}`);
+      } catch (err: any) {
+        console.error(`[sandbox] CA cert installation failed:`, err.message ?? err);
+        console.warn(`[sandbox] NullClaw HTTPS requests may fail without CA certs`);
+      }
 
       // Step 1: Onboard NullClaw with API key and provider
       const onboard = await sandbox.sh`/usr/local/bin/nullclaw onboard --api-key ${config.LLM_API_KEY} --provider ${config.LLM_PROVIDER}`;
@@ -115,24 +124,17 @@ console.log('CA certs installed (' + pem.split('-----BEGIN CERTIFICATE-----').le
       //   - http_request: enables web search (DuckDuckGo primary, Jina fallback)
       //     and general HTTP fetching for NullClaw's http_request tool
       //   - autonomy: full access to all built-in tools without approval prompts
-      const patchConfig = await sandbox.sh`deno eval "
-const p = Deno.env.get('HOME') + '/.nullclaw/config.json';
-let c = {};
-try { c = JSON.parse(Deno.readTextFileSync(p)); } catch {}
-c.http_request = {
-  enabled: true,
-  search_provider: 'duckduckgo',
-  search_fallback_providers: ['jina']
-};
-c.autonomy = {
-  level: 'full',
-  allowed_commands: ['*'],
-  allowed_paths: ['*'],
-  require_approval_for_medium_risk: false
-};
-Deno.writeTextFileSync(p, JSON.stringify(c, null, 2));
-console.log('ok');
-"`;
+      const patchScript = [
+        'const p = Deno.env.get("HOME") + "/.nullclaw/config.json";',
+        'let c = {};',
+        'try { c = JSON.parse(Deno.readTextFileSync(p)); } catch {}',
+        'c.http_request = { enabled: true, search_provider: "duckduckgo", search_fallback_providers: ["jina"] };',
+        'c.autonomy = { level: "full", allowed_commands: ["*"], allowed_paths: ["*"], require_approval_for_medium_risk: false };',
+        'Deno.writeTextFileSync(p, JSON.stringify(c, null, 2));',
+        'console.log("config patched");',
+      ].join("\n");
+      await sandbox.fs.writeTextFile("/tmp/patch-config.ts", patchScript);
+      const patchConfig = await sandbox.sh`deno run --allow-read --allow-write --allow-env /tmp/patch-config.ts`;
       if (patchConfig.stderr) console.warn(`[sandbox] Config patch stderr: ${patchConfig.stderr}`);
 
       // Step 3: Spawn the interactive agent directly.
