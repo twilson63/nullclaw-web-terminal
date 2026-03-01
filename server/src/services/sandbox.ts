@@ -90,24 +90,27 @@ export async function createSandbox(): Promise<SandboxInstance> {
 
     async spawnNullClaw(): Promise<SandboxProcess> {
       // Step 0: Ensure CA certificates are available for HTTPS/TLS.
-      // NullClaw (static Zig binary) uses Zig's built-in TLS which looks for
-      // CA certs via SSL_CERT_FILE env var, then /etc/ssl/certs/ca-certificates.crt.
-      // The Deno Sandbox runs as non-root so /etc/ssl is not writable.
-      // We download to a user-writable path and pass SSL_CERT_FILE when spawning.
-      const CA_CERT_PATH = "/tmp/ca-certificates.crt";
+      // NullClaw (static Zig binary) uses Zig's built-in TLS which hardcodes
+      // Linux cert paths: /etc/ssl/certs/ca-certificates.crt, /etc/ssl/cert.pem, etc.
+      // (Zig does NOT check SSL_CERT_FILE — it's not OpenSSL.)
+      // The Deno Sandbox runs as non-root, so we download to /tmp first via Deno
+      // (which has its own bundled CAs), then use sudo to copy to /etc/ssl/.
       try {
         const certScript = [
           'const resp = await fetch("https://curl.se/ca/cacert.pem");',
           'if (!resp.ok) { console.error("fetch failed: " + resp.status); Deno.exit(1); }',
           'const pem = await resp.text();',
-          `await Deno.writeTextFile("${CA_CERT_PATH}", pem);`,
+          'await Deno.writeTextFile("/tmp/ca-certificates.crt", pem);',
           'const count = pem.split("-----BEGIN CERTIFICATE-----").length - 1;',
-          'console.log("CA certs installed (" + count + " certs)");',
+          'console.log("Downloaded " + count + " CA certs");',
         ].join("\n");
         await sandbox.fs.writeTextFile("/tmp/install-certs.ts", certScript);
-        const installCerts = await sandbox.sh`deno run --allow-net --allow-read --allow-write /tmp/install-certs.ts`;
-        if (installCerts.stdout) console.log(`[sandbox] ${installCerts.stdout}`);
-        if (installCerts.stderr) console.warn(`[sandbox] CA certs stderr: ${installCerts.stderr}`);
+        const download = await sandbox.sh`deno run --allow-net --allow-read --allow-write /tmp/install-certs.ts`;
+        if (download.stdout) console.log(`[sandbox] ${download.stdout}`);
+
+        // Copy to all locations Zig's TLS checks on Linux
+        await sandbox.sh`sudo mkdir -p /etc/ssl/certs /etc/pki/tls/certs && sudo cp /tmp/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt && sudo cp /tmp/ca-certificates.crt /etc/ssl/cert.pem && sudo cp /tmp/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt`;
+        console.log("[sandbox] CA certs installed to /etc/ssl/");
       } catch (err: any) {
         console.error(`[sandbox] CA cert installation failed:`, err.message ?? err);
         console.warn(`[sandbox] NullClaw HTTPS requests may fail without CA certs`);
@@ -139,9 +142,6 @@ export async function createSandbox(): Promise<SandboxInstance> {
       const patchConfig = await sandbox.sh`deno run --allow-read --allow-write --allow-env /tmp/patch-config.ts`;
       if (patchConfig.stderr) console.warn(`[sandbox] Config patch stderr: ${patchConfig.stderr}`);
 
-      // Step 2.5: Set SSL_CERT_FILE so Zig's TLS can find the CA bundle.
-      await sandbox.env.set("SSL_CERT_FILE", CA_CERT_PATH);
-
       // Step 3: Spawn the interactive agent directly.
       const proc = await sandbox.spawn("/usr/local/bin/nullclaw", {
         args: [
@@ -149,9 +149,6 @@ export async function createSandbox(): Promise<SandboxInstance> {
           "--provider", config.LLM_PROVIDER,
           "--model", config.LLM_MODEL,
         ],
-        env: {
-          SSL_CERT_FILE: CA_CERT_PATH,
-        },
         stdin: "piped",
         stdout: "piped",
         stderr: "piped",
