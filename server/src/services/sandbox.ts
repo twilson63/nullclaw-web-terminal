@@ -112,19 +112,19 @@ export async function createSandbox(): Promise<SandboxInstance> {
         'const p = Deno.env.get("HOME") + "/.nullclaw/config.json";',
         'let c = {};',
         'try { c = JSON.parse(Deno.readTextFileSync(p)); } catch {}',
-        // Enable http_request tool with DuckDuckGo search — allow ALL domains
-        'c.http_request = { enabled: true, search_provider: "duckduckgo", search_fallback_providers: ["jina"], backend: "curl", use_system_curl: true, allowed_domains: ["*"], allowlist: ["*"] };',
-        // Enable browser tool — allow ALL domains
+        // Enable http_request tool with DuckDuckGo search
+        'c.http_request = { enabled: true, search_provider: "duckduckgo", search_fallback_providers: ["jina"] };',
+        // Enable browser tool
         'c.browser = { enabled: true, allowed_domains: ["*"] };',
-        // Full autonomy — no approval prompts, all commands/paths, no workspace restriction
-        'c.autonomy = { level: "full", allowed_commands: ["*"], allowed_paths: ["*"], allowed_domains: ["*"], workspace_only: false, require_approval_for_medium_risk: false, block_high_risk_commands: false, max_actions_per_hour: 99999 };',
-        // Explicitly enable all tools including shell and http_request
-        'c.tools = Object.assign(c.tools || {}, { enabled: ["shell", "file_read", "file_write", "file_edit", "http_request", "browser_open", "screenshot", "memory_store", "memory_recall", "memory_forget", "hardware_info", "composio"], shell_timeout_secs: 120, shell_max_output_bytes: 1048576, web_fetch_max_chars: 50000, allowed_domains: ["*"] });',
-        // Disable NullClaw internal sandbox (Landlock/Firejail/etc) — already inside Firecracker
-        'c.security = { sandbox: { backend: "none" }, resources: { max_memory_mb: 512 }, allowed_domains: ["*"], network: { allowlist: ["*"] } };',
+        // Autonomy: explicit command allowlist (wildcard ["*"] may not work per GH issues)
+        'c.autonomy = { level: "full", allowed_commands: ["curl", "bash", "sh", "git", "python3", "deno", "node", "cat", "ls", "head", "tail", "grep", "find", "echo", "env", "whoami", "wget", "ping", "dig", "nslookup", "apt-get", "dpkg", "uname", "date", "wc", "sort", "uniq", "tr", "sed", "awk", "mkdir", "cp", "mv", "rm", "touch", "chmod", "chown", "tar", "gzip", "gunzip", "zip", "unzip"], allowed_paths: [], workspace_only: false, require_approval_for_medium_risk: false, block_high_risk_commands: false, max_actions_per_hour: 99999 };',
+        // Tools config
+        'c.tools = Object.assign(c.tools || {}, { shell_timeout_secs: 120, shell_max_output_bytes: 1048576, web_fetch_max_chars: 50000 });',
+        // Disable NullClaw internal sandbox — already inside Firecracker
+        'c.security = { sandbox: { backend: "none" }, resources: { max_memory_mb: 512 } };',
         // Disable gateway restrictions
         'c.gateway = Object.assign(c.gateway || {}, { allow_public_bind: true });',
-        // Ensure runtime is native (not docker/wasm) with no network restrictions
+        // Native runtime
         'c.runtime = { kind: "native" };',
         'Deno.writeTextFileSync(p, JSON.stringify(c, null, 2));',
         // Print the final config for debugging
@@ -168,8 +168,6 @@ export async function createSandbox(): Promise<SandboxInstance> {
           "agent",
           "--provider", config.LLM_PROVIDER,
           "--model", config.LLM_MODEL,
-          "--sandbox", "none",
-          "--autonomy", "full",
         ],
         env: {
           SHELL: "/bin/bash",
@@ -177,12 +175,6 @@ export async function createSandbox(): Promise<SandboxInstance> {
           HOME: "/home/app",
           PATH: "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
           LANG: "en_US.UTF-8",
-          NULLCLAW_SANDBOX: "none",
-          NULLCLAW_AUTONOMY: "full",
-          NULLCLAW_ALLOW_SHELL: "true",
-          NULLCLAW_ALLOW_HTTP: "true",
-          NULLCLAW_ALLOWED_COMMANDS: "*",
-          NULLCLAW_ALLOWED_DOMAINS: "*",
         },
         stdin: "piped",
         stdout: "piped",
