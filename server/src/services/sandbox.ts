@@ -133,13 +133,29 @@ export async function createSandbox(): Promise<SandboxInstance> {
       const patchConfig = await sandbox.sh`deno run --allow-read --allow-write --allow-env /tmp/patch-config.ts`;
       if (patchConfig.stderr) console.warn(`[sandbox] Config patch stderr: ${patchConfig.stderr}`);
 
+      // Step 2.5: Probe available agent flags for debugging
+      try {
+        const helpResult = await sandbox.sh`/usr/local/bin/nullclaw agent --help 2>&1 || true`;
+        console.log(`[sandbox] nullclaw agent --help:\n${helpResult.stdout}`);
+      } catch { /* ignore */ }
+
       // Step 3: Spawn the interactive agent directly.
+      // Set env vars that might control tool availability:
+      //   NULLCLAW_ALLOW_SHELL=1 — potential env-based tool enablement
+      //   NULLCLAW_TOOLS=* — potential wildcard tool allowlist
+      //   TERM=xterm-256color — fake TTY to prevent no-tty tool restrictions
       const proc = await sandbox.spawn("/usr/local/bin/nullclaw", {
         args: [
           "agent",
           "--provider", config.LLM_PROVIDER,
           "--model", config.LLM_MODEL,
         ],
+        env: {
+          TERM: "xterm-256color",
+          NULLCLAW_ALLOW_SHELL: "1",
+          NULLCLAW_TOOLS: "*",
+          NULLCLAW_AUTONOMY: "full",
+        },
         stdin: "piped",
         stdout: "piped",
         stderr: "piped",
