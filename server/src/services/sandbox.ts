@@ -133,7 +133,12 @@ export async function createSandbox(): Promise<SandboxInstance> {
       const patchConfig = await sandbox.sh`deno run --allow-read --allow-write --allow-env /tmp/patch-config.ts`;
       if (patchConfig.stderr) console.warn(`[sandbox] Config patch stderr: ${patchConfig.stderr}`);
 
-      // Step 2.5: Probe available agent flags and tool list for debugging
+      // Step 2.5: Set essential env vars that the sandbox doesn't provide by default
+      await sandbox.env.set("SHELL", "/bin/bash");
+      await sandbox.env.set("TERM", "xterm-256color");
+      await sandbox.env.set("LANG", "en_US.UTF-8");
+
+      // Step 2.6: Probe available agent flags and tool list for debugging
       try {
         const helpResult = await sandbox.sh`/usr/local/bin/nullclaw agent --help 2>&1; echo "---STDERR---"; /usr/local/bin/nullclaw agent --help 1>/dev/null 2>&1 || true`;
         console.log(`[sandbox] nullclaw agent --help stdout: ${helpResult.stdout}`);
@@ -150,10 +155,10 @@ export async function createSandbox(): Promise<SandboxInstance> {
       }
 
       // Step 3: Spawn the interactive agent directly.
-      // Set env vars that might control tool availability:
-      //   NULLCLAW_ALLOW_SHELL=1 — potential env-based tool enablement
-      //   NULLCLAW_TOOLS=* — potential wildcard tool allowlist
-      //   TERM=xterm-256color — fake TTY to prevent no-tty tool restrictions
+      // Critical env vars:
+      //   SHELL=/bin/bash — NullClaw's shell tool requires $SHELL to be set
+      //   TERM=xterm-256color — prevent no-tty restrictions
+      //   HOME=/home/app — ensure config/workspace are found
       const proc = await sandbox.spawn("/usr/local/bin/nullclaw", {
         args: [
           "agent",
@@ -161,10 +166,11 @@ export async function createSandbox(): Promise<SandboxInstance> {
           "--model", config.LLM_MODEL,
         ],
         env: {
+          SHELL: "/bin/bash",
           TERM: "xterm-256color",
-          NULLCLAW_ALLOW_SHELL: "1",
-          NULLCLAW_TOOLS: "*",
-          NULLCLAW_AUTONOMY: "full",
+          HOME: "/home/app",
+          PATH: "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+          LANG: "en_US.UTF-8",
         },
         stdin: "piped",
         stdout: "piped",
