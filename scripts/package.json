@@ -1,0 +1,13 @@
+{
+  "name": "nullclaw-sandbox-scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "create-snapshot": "npx tsx create-snapshot.ts",
+    "create-snapshot:force": "npx tsx create-snapshot.ts --force"
+  },
+  "dependencies": {
+    "@deno/sandbox": "^0.12.0",
+    "tsx": "^4.0.0"
+  }
+}

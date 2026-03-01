@@ -1,0 +1,269 @@
+/* === Reset & Base === */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: #0a0a0a;
+  color: #e0e0e0;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+}
+
+/* === Landing Page === */
+.landing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 2rem;
+}
+
+.landing-content {
+  text-align: center;
+  max-width: 480px;
+}
+
+.landing-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.5px;
+}
+
+.landing-title-null {
+  color: #8be9fd;
+}
+
+.landing-title-claw {
+  color: #ff79c6;
+}
+
+.landing-title-suffix {
+  color: #6272a4;
+  font-weight: 400;
+}
+
+.landing-tagline {
+  color: #888;
+  font-size: 1rem;
+  margin-bottom: 2rem;
+}
+
+.landing-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.btn-primary {
+  background: #50fa7b;
+  color: #0a0a0a;
+  border: none;
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #69ff94;
+  transform: translateY(-1px);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: #6272a4;
+  border: 1px solid #333;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-secondary:hover {
+  border-color: #6272a4;
+  color: #e0e0e0;
+}
+
+.landing-error {
+  color: #ff5555;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.landing-stats {
+  color: #555;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.stat-separator {
+  color: #333;
+}
+
+/* === Connecting State === */
+.connecting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.connecting-content {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.connecting-content p {
+  color: #888;
+  font-size: 0.95rem;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #222;
+  border-top-color: #50fa7b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* === Terminal Container === */
+.terminal-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.terminal-wrapper {
+  flex: 1;
+  overflow: hidden;
+  padding: 4px;
+}
+
+.terminal-wrapper .xterm {
+  height: 100%;
+}
+
+/* === Status Bar === */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  background: #111;
+  border-top: 1px solid #222;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.status-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.status-label {
+  color: #888;
+}
+
+.status-session-id {
+  color: #6272a4;
+  font-family: inherit;
+}
+
+.status-uptime {
+  color: #555;
+}
+
+.btn-end-session {
+  background: transparent;
+  color: #888;
+  border: 1px solid #333;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.7rem;
+  font-family: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-end-session:hover {
+  border-color: #ff5555;
+  color: #ff5555;
+}
+
+.btn-end-session.btn-confirm {
+  border-color: #ff5555;
+  background: #ff5555;
+  color: #0a0a0a;
+  font-weight: 600;
+}
+
+/* === Transitions === */
+.landing,
+.connecting,
+.terminal-container {
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+bun.lockb
+bun.lock
+package-lock.json
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Environment (contains secrets)
+.env
+.env.local
+.env.*.local
+
+# Build output
+client/dist/
+server/dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vite
+client/node_modules/.vite/
+
+# NullClaw binary (if downloaded locally)
+nullclaw
+*.bin

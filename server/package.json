@@ -1,0 +1,22 @@
+{
+  "name": "nullclaw-web-terminal-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx tsx --watch src/index.ts",
+    "start": "npx tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@deno/sandbox": "^0.12.0",
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.7.0",
+    "nanoid": "^3.3.8"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}
