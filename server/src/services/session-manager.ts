@@ -137,9 +137,6 @@ class SessionManager {
   addSSEConnection(id: string, conn: SSEConnection): void {
     const session = this.requireSession(id);
     session.sseConnections.add(conn);
-    console.log(
-      `[session] SSE connection added to ${id} (total: ${session.sseConnections.size})`
-    );
   }
 
   removeSSEConnection(id: string, conn: SSEConnection): void {
@@ -147,9 +144,6 @@ class SessionManager {
     if (session) {
       conn.active = false;
       session.sseConnections.delete(conn);
-      console.log(
-        `[session] SSE connection removed from ${id} (total: ${session.sseConnections.size})`
-      );
     }
   }
 
@@ -191,8 +185,6 @@ class SessionManager {
   private broadcast(session: Session, event: SSEEvent): void {
     const payload = `event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
     const encoded = new TextEncoder().encode(payload);
-
-    console.log(`[sse] Broadcasting ${event.event} to ${session.sseConnections.size} connections (${payload.length} bytes)`);
 
     for (const conn of session.sseConnections) {
       if (!conn.active) {

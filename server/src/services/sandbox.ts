@@ -64,13 +64,13 @@ export async function createSandbox(): Promise<SandboxInstance> {
     // Minimal memory — NullClaw only needs ~1 MB but leave room for OS
     memory: "768MiB",
 
-    // Only allow outbound to the LLM API
-    allowNet: [config.LLM_API_HOST],
+    // Unrestricted outbound network — enables NullClaw web search, fetch, etc.
+    // Omitting allowNet = no restrictions (all hosts allowed)
 
     // Inject API key securely (never enters sandbox env)
     secrets: {
       LLM_API_KEY: {
-        hosts: [config.LLM_API_HOST],
+        hosts: ["*"],
         value: config.LLM_API_KEY,
       },
     },
@@ -90,10 +90,8 @@ export async function createSandbox(): Promise<SandboxInstance> {
 
     async spawnNullClaw(): Promise<SandboxProcess> {
       // Step 1: Onboard NullClaw with API key and provider
-      console.log("[sandbox] Running nullclaw onboard...");
       const onboard = await sandbox.sh`/usr/local/bin/nullclaw onboard --api-key ${config.LLM_API_KEY} --provider ${config.LLM_PROVIDER}`;
-      console.log(`[sandbox] Onboard stdout: ${onboard.stdout}`);
-      if (onboard.stderr) console.log(`[sandbox] Onboard stderr: ${onboard.stderr}`);
+      if (onboard.stderr) console.warn(`[sandbox] Onboard stderr: ${onboard.stderr}`);
 
       // Step 2: Spawn the interactive agent directly.
       const proc = await sandbox.spawn("/usr/local/bin/nullclaw", {
@@ -116,15 +114,10 @@ export async function createSandbox(): Promise<SandboxInstance> {
       // (which would send EOF to the child process).
       const stdinWriter = proc.stdin ? proc.stdin.getWriter() : null;
 
-      // Pipe stdout ReadableStream -> callbacks
-      console.log(`[sandbox] proc.stdout: ${proc.stdout ? "available" : "null"}`);
-      console.log(`[sandbox] proc.stderr: ${proc.stderr ? "available" : "null"}`);
-      console.log(`[sandbox] proc.stdin: ${proc.stdin ? "available" : "null"}`);
+      // Pipe stdout/stderr ReadableStreams -> callbacks
       if (proc.stdout) {
         pipeStream(proc.stdout, stdoutCallbacks, "stdout");
       }
-
-      // Pipe stderr ReadableStream -> callbacks
       if (proc.stderr) {
         pipeStream(proc.stderr, stderrCallbacks, "stderr");
       }
@@ -174,7 +167,7 @@ export async function createSandbox(): Promise<SandboxInstance> {
 
     async destroy(): Promise<void> {
       if (!sandbox.id) {
-        console.warn(`[sandbox] Sandbox ID is null (Bun WebSocket compat issue). Cannot kill — it will auto-terminate at timeout.`);
+        console.warn("[sandbox] Sandbox ID is null — sandbox will auto-terminate at timeout");
         return;
       }
       try {
@@ -210,16 +203,11 @@ function pipeStream(
   const decoder = new TextDecoder();
 
   (async () => {
-    console.log(`[sandbox] pipeStream(${label}) started reading`);
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) {
-          console.log(`[sandbox] pipeStream(${label}) done`);
-          break;
-        }
+        if (done) break;
         const text = decoder.decode(value, { stream: true });
-        console.log(`[sandbox] pipeStream(${label}) got ${text.length} chars, ${callbacks.length} callbacks`);
         for (const cb of callbacks) {
           try {
             cb(text);
@@ -229,7 +217,7 @@ function pipeStream(
         }
       }
     } catch (err) {
-      console.log(`[sandbox] pipeStream(${label}) error:`, err);
+      console.error(`[sandbox] pipeStream(${label}) error:`, err);
     }
   })();
 }
