@@ -127,9 +127,7 @@ export async function createSandbox(): Promise<SandboxInstance> {
         // Native runtime
         'c.runtime = { kind: "native" };',
         'Deno.writeTextFileSync(p, JSON.stringify(c, null, 2));',
-        // Print the final config for debugging
-        'console.log("config patched:");',
-        'console.log(JSON.stringify(c, null, 2));',
+        'console.log("config patched");',
       ].join("\n");
       await sandbox.fs.writeTextFile("/tmp/patch-config.ts", patchScript);
       const patchConfig = await sandbox.sh`deno run --allow-read --allow-write --allow-env /tmp/patch-config.ts`;
@@ -140,29 +138,49 @@ export async function createSandbox(): Promise<SandboxInstance> {
       await sandbox.env.set("TERM", "xterm-256color");
       await sandbox.env.set("LANG", "en_US.UTF-8");
 
-      // Step 2.6: Probe available agent flags and tool list for debugging
-      try {
-        const helpResult = await sandbox.sh`/usr/local/bin/nullclaw agent --help 2>&1; echo "---STDERR---"; /usr/local/bin/nullclaw agent --help 1>/dev/null 2>&1 || true`;
-        console.log(`[sandbox] nullclaw agent --help stdout: ${helpResult.stdout}`);
-        if (helpResult.stderr) console.log(`[sandbox] nullclaw agent --help stderr: ${helpResult.stderr}`);
-      } catch (err: any) {
-        console.log(`[sandbox] agent --help failed: ${err.message}`);
-      }
-      try {
-        const doctorResult = await sandbox.sh`/usr/local/bin/nullclaw doctor 2>&1 || true`;
-        console.log(`[sandbox] nullclaw doctor: ${doctorResult.stdout}`);
-        if (doctorResult.stderr) console.log(`[sandbox] nullclaw doctor stderr: ${doctorResult.stderr}`);
-      } catch (err: any) {
-        console.log(`[sandbox] doctor failed: ${err.message}`);
-      }
+      // Step 2.6: Write TOOLS.md to instruct NullClaw to use curl for web access.
+      // The built-in http_request tool uses Zig's TLS which can't handle modern
+      // post-quantum cipher suites (X25519MLKEM768). curl uses OpenSSL and works fine.
+      const toolsMd = [
+        "# TOOLS.md - Environment Notes",
+        "",
+        "## Web Access",
+        "",
+        "**IMPORTANT: Always use `curl` via the shell tool for ALL web requests.**",
+        "The built-in `http_request` and `browser` tools do NOT work in this environment",
+        "(TLS initialization fails due to a Zig TLS compatibility issue).",
+        "",
+        "Use shell commands instead:",
+        "",
+        "### Web Search (DuckDuckGo)",
+        "```bash",
+        'curl -s "https://html.duckduckgo.com/html/?q=YOUR+SEARCH+QUERY" | grep -oP \'(?<=<a rel="nofollow" class="result__a" href=")[^"]*\' | head -10',
+        "```",
+        "",
+        "### Fetch a URL",
+        "```bash",
+        "curl -sL https://example.com",
+        "```",
+        "",
+        "### Fetch JSON API",
+        "```bash",
+        'curl -s "https://api.example.com/data" | python3 -m json.tool',
+        "```",
+        "",
+        "### POST JSON",
+        "```bash",
+        "curl -s -X POST https://api.example.com/endpoint -H 'Content-Type: application/json' -d '{\"key\": \"value\"}'",
+        "```",
+        "",
+        "## Available Shell Commands",
+        "",
+        "Common commands are available: curl, bash, git, python3, deno, cat, ls,",
+        "grep, find, sed, awk, and most standard Unix utilities.",
+        "",
+      ].join("\n");
+      await sandbox.fs.writeTextFile("/home/app/.nullclaw/workspace/TOOLS.md", toolsMd);
 
       // Step 3: Spawn the interactive agent directly.
-      // Critical env vars:
-      //   SHELL=/bin/bash — NullClaw's shell tool requires $SHELL to be set
-      //   TERM=xterm-256color — prevent no-tty restrictions
-      //   HOME=/home/app — ensure config/workspace are found
-      //   NULLCLAW_SANDBOX=none — env-level sandbox override
-      //   NULLCLAW_AUTONOMY=full — env-level autonomy override
       const proc = await sandbox.spawn("/usr/local/bin/nullclaw", {
         args: [
           "agent",
