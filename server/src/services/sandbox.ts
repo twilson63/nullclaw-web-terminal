@@ -67,10 +67,16 @@ export async function createSandbox(): Promise<SandboxInstance> {
     // Unrestricted outbound network — enables NullClaw web search, fetch, etc.
     // Omitting allowNet = no restrictions (all hosts allowed)
 
-    // Inject API key securely (never enters sandbox env)
+    // Inject API key securely (never enters sandbox env).
+    // IMPORTANT: Only bind to the LLM API host, NOT wildcard ["*"].
+    // The secrets proxy intercepts TLS for matched hosts and presents its own
+    // cert. Zig's TLS (used by NullClaw) can't verify the proxy cert, so
+    // wildcard binding breaks ALL outbound HTTPS from non-Deno processes.
+    // By scoping to the LLM host only, web search/fetch connections bypass
+    // the proxy and use standard TLS that Zig can verify.
     secrets: {
       LLM_API_KEY: {
-        hosts: ["*"],
+        hosts: [config.LLM_API_HOST],
         value: config.LLM_API_KEY,
       },
     },
