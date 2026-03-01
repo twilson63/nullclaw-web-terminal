@@ -89,6 +89,23 @@ export async function createSandbox(): Promise<SandboxInstance> {
     raw: sandbox,
 
     async spawnNullClaw(): Promise<SandboxProcess> {
+      // Step 0: Ensure CA certificates are available for HTTPS/TLS.
+      // NullClaw (static Zig binary) uses Zig's built-in TLS which looks for
+      // CA certs at /etc/ssl/certs/ca-certificates.crt. The Deno Sandbox microVM
+      // may not have them pre-installed, causing TlsInitializationFailed errors.
+      // We use Deno (which has its own bundled root CAs) to fetch Mozilla's CA bundle.
+      const installCerts = await sandbox.sh`deno eval "
+const resp = await fetch('https://curl.se/ca/cacert.pem');
+if (!resp.ok) throw new Error('Failed to fetch CA bundle: ' + resp.status);
+const pem = await resp.text();
+await Deno.mkdir('/etc/ssl/certs', { recursive: true });
+await Deno.writeTextFile('/etc/ssl/certs/ca-certificates.crt', pem);
+// Also write to alternate locations Zig may check
+await Deno.writeTextFile('/etc/ssl/cert.pem', pem);
+console.log('CA certs installed (' + pem.split('-----BEGIN CERTIFICATE-----').length + ' certs)');
+"`;
+      if (installCerts.stderr) console.warn(`[sandbox] CA certs stderr: ${installCerts.stderr}`);
+
       // Step 1: Onboard NullClaw with API key and provider
       const onboard = await sandbox.sh`/usr/local/bin/nullclaw onboard --api-key ${config.LLM_API_KEY} --provider ${config.LLM_PROVIDER}`;
       if (onboard.stderr) console.warn(`[sandbox] Onboard stderr: ${onboard.stderr}`);
