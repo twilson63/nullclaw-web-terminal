@@ -112,14 +112,20 @@ export async function createSandbox(): Promise<SandboxInstance> {
         'const p = Deno.env.get("HOME") + "/.nullclaw/config.json";',
         'let c = {};',
         'try { c = JSON.parse(Deno.readTextFileSync(p)); } catch {}',
+        // Enable http_request tool with DuckDuckGo (no API key needed)
         'c.http_request = { enabled: true, search_provider: "duckduckgo", search_fallback_providers: ["jina"] };',
-        'c.autonomy = { level: "full", allowed_commands: ["*"], allowed_paths: ["*"], require_approval_for_medium_risk: false, block_high_risk_commands: false };',
-        // Disable NullClaw's internal sandbox — already inside Firecracker microVM
+        // Full autonomy — no approval prompts, all commands/paths, no workspace restriction
+        'c.autonomy = { level: "full", allowed_commands: ["*"], allowed_paths: ["*"], workspace_only: false, require_approval_for_medium_risk: false, block_high_risk_commands: false, max_actions_per_hour: 0 };',
+        // Disable NullClaw internal sandbox (Landlock/Firejail/etc) — already inside Firecracker
         'c.security = { sandbox: { backend: "none" }, resources: { max_memory_mb: 512 } };',
-        // Ensure workspace_only is off so shell can access the full filesystem
-        'c.autonomy.workspace_only = false;',
+        // Disable gateway restrictions — not running the gateway, but ensure no network allowlists
+        'c.gateway = Object.assign(c.gateway || {}, { allow_public_bind: true });',
+        // Ensure runtime is native (not docker/wasm) with no network restrictions
+        'c.runtime = { kind: "native" };',
         'Deno.writeTextFileSync(p, JSON.stringify(c, null, 2));',
-        'console.log("config patched");',
+        // Print the final config for debugging
+        'console.log("config patched:");',
+        'console.log(JSON.stringify(c, null, 2));',
       ].join("\n");
       await sandbox.fs.writeTextFile("/tmp/patch-config.ts", patchScript);
       const patchConfig = await sandbox.sh`deno run --allow-read --allow-write --allow-env /tmp/patch-config.ts`;
