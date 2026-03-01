@@ -27,11 +27,17 @@ const app = new Hono();
 // Request logging
 app.use("*", logger());
 
-// CORS — allow Vite dev server and any origin in development
+// CORS — in production the frontend is served from the same origin so CORS
+// isn't needed. In development, allow the Vite dev server. We also accept
+// the CORS_ORIGIN env var for custom deployments.
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",")
+  : ["http://localhost:5173", "http://127.0.0.1:5173"];
+
 app.use(
   "/api/*",
   cors({
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: allowedOrigins,
     allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type"],
     maxAge: 86400,
@@ -85,11 +91,13 @@ app.onError((err, c) => {
 
 // ── Start Server ───────────────────────────────────────────────
 
+const port = Number(process.env.PORT) || config.PORT;
+
 console.log(`
 ╔══════════════════════════════════════════╗
 ║     NullClaw Web Terminal — Server       ║
 ╠══════════════════════════════════════════╣
-║  Port:       ${String(config.PORT).padEnd(27)}║
+║  Port:       ${String(port).padEnd(27)}║
 ║  Region:     ${config.DENO_REGION.padEnd(27)}║
 ║  Snapshot:   ${config.NULLCLAW_SNAPSHOT.padEnd(27)}║
 ║  Max sesns:  ${String(config.MAX_CONCURRENT_SESSIONS).padEnd(27)}║
@@ -100,9 +108,9 @@ console.log(`
 serve(
   {
     fetch: app.fetch,
-    port: config.PORT,
+    port: port,
   },
   (info) => {
-    console.log(`Started development server: http://localhost:${info.port}`);
+    console.log(`Server listening on http://localhost:${info.port}`);
   }
 );

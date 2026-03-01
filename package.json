@@ -1,0 +1,13 @@
+{
+  "name": "nullclaw-web-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "cd client && npm install && npm run build && cd ../server && npm install",
+    "start": "cd server && npx tsx src/index.ts",
+    "dev": "cd server && npm run dev"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
