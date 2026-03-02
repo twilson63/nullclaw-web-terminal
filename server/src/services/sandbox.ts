@@ -108,6 +108,21 @@ export async function createSandbox(): Promise<SandboxInstance> {
       //   - http_request: enables web search (DuckDuckGo primary, Jina fallback)
       //     and general HTTP fetching for NullClaw's http_request tool
       //   - autonomy: full access to all built-in tools without approval prompts
+      const allowedCommands = [
+        "curl", "/usr/bin/curl", "/usr/local/bin/curl",
+        "bash", "/bin/bash", "/usr/bin/bash",
+        "sh", "/bin/sh", "/usr/bin/sh",
+        "git", "/usr/bin/git", "/usr/local/bin/git",
+        "python3", "/usr/bin/python3", "/usr/local/bin/python3",
+        "deno", "/usr/bin/deno", "/usr/local/bin/deno", "/home/app/.deno/bin/deno",
+        "node", "/usr/bin/node", "/usr/local/bin/node",
+        "npx", "/usr/bin/npx", "/usr/local/bin/npx",
+        "npm", "/usr/bin/npm", "/usr/local/bin/npm",
+        "cat", "ls", "pwd", "head", "tail", "grep", "find", "echo", "env", "which",
+        "whoami", "wget", "ping", "dig", "nslookup", "uname", "date", "wc", "sort",
+        "uniq", "tr", "sed", "awk", "mkdir", "cp", "mv", "rm", "touch", "chmod", "tar"
+      ];
+
       const patchScript = [
         'const p = Deno.env.get("HOME") + "/.nullclaw/config.json";',
         'let c = {};',
@@ -117,7 +132,7 @@ export async function createSandbox(): Promise<SandboxInstance> {
         // Enable browser tool with open domain access
         'c.browser = { enabled: true, allowed_domains: ["*"] };',
         // Autonomy: explicit command allowlist with full paths too
-        'c.autonomy = { level: "full", allowed_commands: ["*", "curl", "/usr/bin/curl", "bash", "/bin/bash", "/usr/bin/bash", "sh", "/bin/sh", "git", "/usr/bin/git", "python3", "/usr/bin/python3", "deno", "/usr/bin/deno", "/home/app/.deno/bin/deno", "node", "/usr/bin/node", "/usr/local/bin/node", "npx", "/usr/bin/npx", "/usr/local/bin/npx", "npm", "/usr/bin/npm", "/usr/local/bin/npm", "cat", "ls", "head", "tail", "grep", "find", "echo", "env", "whoami", "wget", "ping", "dig", "nslookup", "uname", "date", "wc", "sort", "uniq", "tr", "sed", "awk", "mkdir", "cp", "mv", "rm", "touch", "chmod", "tar"], allowed_paths: [], workspace_only: false, require_approval_for_medium_risk: false, block_high_risk_commands: false, max_actions_per_hour: 99999 };',
+        `c.autonomy = { level: "full", allowed_commands: ${JSON.stringify(allowedCommands)}, allowed_paths: [], workspace_only: false, require_approval_for_medium_risk: false, block_high_risk_commands: false, max_actions_per_hour: 99999 };`,
         // Tools config
         'c.tools = Object.assign(c.tools || {}, { shell_timeout_secs: 120, shell_max_output_bytes: 1048576, web_fetch_max_chars: 50000 });',
         // Disable NullClaw internal sandbox — already inside Firecracker
@@ -157,6 +172,12 @@ export async function createSandbox(): Promise<SandboxInstance> {
         "",
         "This is NOT optional. The http_request and browser tools WILL fail with TLS errors every time.",
         "Use shell + curl instead. curl is in the allowed commands list.",
+        "",
+        "## Command Execution Rules",
+        "",
+        "Do not claim a command is unavailable or blocked unless you actually ran it and got that error.",
+        "For tooling checks, run one of: `command -v <cmd>`, `which <cmd>`, or `<cmd> --version`.",
+        "If a command fails, report the exact stderr output rather than guessing the reason.",
         "",
       ].join("\n");
       try {

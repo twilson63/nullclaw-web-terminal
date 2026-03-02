@@ -22,6 +22,8 @@ export function useTerminal({ terminal, sessionId, onSessionEnd }: UseTerminalOp
   const waitingRef = useRef(false);
   const spinnerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const spinnerFrameRef = useRef(0);
+  const inputBufferRef = useRef("");
+  const escapeSequenceRef = useRef(false);
 
   const stopSpinner = useCallback(() => {
     if (spinnerIntervalRef.current) {
@@ -71,6 +73,8 @@ export function useTerminal({ terminal, sessionId, onSessionEnd }: UseTerminalOp
     }
 
     sessionEndedRef.current = false;
+    inputBufferRef.current = "";
+    escapeSequenceRef.current = false;
 
     const connect = () => {
       cleanup();
@@ -155,24 +159,43 @@ export function useTerminal({ terminal, sessionId, onSessionEnd }: UseTerminalOp
     const inputDisposable = terminal.onData((data: string) => {
       if (sessionEndedRef.current) return;
 
-      // Local echo: display typed characters in the terminal
       for (const ch of data) {
+        // Ignore ANSI escape sequences (arrow keys, home/end, etc.).
+        // In line-buffered mode we only support basic input + backspace.
+        if (escapeSequenceRef.current) {
+          if (ch >= "@" && ch <= "~") {
+            escapeSequenceRef.current = false;
+          }
+          continue;
+        }
+        if (ch === "\x1b") {
+          escapeSequenceRef.current = true;
+          continue;
+        }
+
         if (ch === "\r") {
-          // Enter key: show newline locally, start thinking spinner
+          // Enter key: send a full line to the sandbox.
+          const line = inputBufferRef.current;
+          inputBufferRef.current = "";
           terminal.write("\r\n");
           startSpinner();
+          sendInput(sessionId, `${line}\n`);
         } else if (ch === "\x7f") {
-          // Backspace: move cursor back, overwrite with space, move back
-          terminal.write("\b \b");
-        } else if (ch >= " ") {
-          // Printable character: echo it
+          if (inputBufferRef.current.length > 0) {
+            inputBufferRef.current = inputBufferRef.current.slice(0, -1);
+            // Backspace: move cursor back, overwrite with space, move back
+            terminal.write("\b \b");
+          }
+        } else if (ch === "\x03") {
+          // Ctrl+C should still be forwarded immediately.
+          inputBufferRef.current = "";
+          terminal.write("^C\r\n");
+          sendInput(sessionId, "\x03");
+        } else if (ch >= " " || ch === "\t") {
+          inputBufferRef.current += ch;
           terminal.write(ch);
         }
       }
-
-      // Convert \r (Enter key) to \n for NullClaw's stdin (no PTY)
-      const converted = data.replace(/\r/g, "\n");
-      sendInput(sessionId, converted);
     });
 
     return () => {
